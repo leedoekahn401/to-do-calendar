@@ -1,5 +1,8 @@
-import { NextRequest } from 'next/server';
-
-export async function POST(req: NextRequest) {
-    return new Response(JSON.stringify({ message: 'Hello' }), { status: 200 });
+import { eventController } from "./controller";
+import { NextRequest } from "next/server";
+export async function GET(req: NextRequest) {
+    return eventController.getEvents(req);
+}
+export async function POST(req: NextRequest){
+    return eventController.createEvent(req);
 }
