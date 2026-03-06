@@ -157,9 +157,9 @@ export default function CalendarDashboard() {
     const endTime = format(event.end, "h:mm a");
 
     return (
-      <div className={`w-fit h-full rounded-lg border-2 border-black px-3 flex flex-col items-start justify-start text-left ${bgColor} text-black overflow-hidden`}>
-        <span className="font-bold text-[10px] truncate leading-tight w-full py-0.5">{event.title}</span>
-        <span className="text-[9px] font-semibold opacity-75 truncate w-full">{startTime} - {endTime}</span>
+      <div className={`w-fit h-full rounded-lg border-2 border-black px-4 py-1 flex flex-col items-start justify-start text-left ${bgColor} text-black overflow-hidden`}>
+        <span className="font-bold text-xs truncate leading-tight w-full py-0.5">{event.title}</span>
+        <span className="text-[10px] font-semibold opacity-80 truncate w-full">{startTime} - {endTime}</span>
       </div>
     );
   };
@@ -430,6 +430,12 @@ export default function CalendarDashboard() {
         .custom-calendar-wrapper .rbc-timeslot-group {
           border-bottom: 1px solid #e5e7eb;
           min-height: 80px;
+        }
+        
+        /* Make the +x more indicator black */
+        .custom-calendar-wrapper .rbc-show-more {
+          color: #000 !important;
+          font-weight: bold;
         }
       `}</style>
     </div>
