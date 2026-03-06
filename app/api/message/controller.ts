@@ -87,12 +87,7 @@ export const messageController = {
 
                 // Send function results back to the model for a final text response
                 response = await chat.sendMessage({
-                    message: functionResponses.map(fr => ({
-                        functionResponse: {
-                            name: fr.name,
-                            response: fr.response
-                        }
-                    })) as any // Cast to any because the specific type for message when sending a functionResponse isn't clearly typed in the available scope, but the structure is correct per the Gemini API SDK
+                    message: functionResponses.map(fr => ({ functionResponse: fr }))
                 });
             }
 
