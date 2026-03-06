@@ -1,36 +1,121 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { getUserSession } from "@/supabase/supabase-server";
-
+import { FunctionDeclaration, Type } from "@google/genai";
+import { eventTool } from "@/lib/tool/eventTool";
+import { eventFunction } from "@/lib/tool/eventFunction";
+import { ai } from "@/lib/ai";
 export const messageController = {
-    async sendMessage(req: NextRequest, {params}: any){
-        try{
-            const {user,authError} = await getUserSession();
-            if(authError||!user||!user.id){
-                return NextResponse.json({error: "Unauthenticated"}, {status: 401});
+    async sendMessage(req: NextRequest, { params }: any) {
+        try {
+            const { user, authError } = await getUserSession();
+            if (authError || !user || !user.id) {
+                return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
             }
             const { id } = await params;
             const body = await req.json();
-            const { content } = body;
+            let { chat_history, content } = body;
 
             if (!content) {
                 return NextResponse.json({ error: 'Missing required field "content"' }, { status: 400 });
             }
-            const checkSql = `SELECT uuid FROM chat WHERE uuid = $1 AND user_id = $2`;
-            const checkRes = await query(checkSql, [chat_id, user.id]);
+            const checkSql = `
+                SELECT uuid FROM chat  
+                WHERE uuid = $1 
+                AND user_id = $2
+            `;
+            const checkRes = await query(checkSql, [id, user.id]);
             if (checkRes.rows.length === 0) {
-                return NextResponse.json({ error: "Chat not found or unauthorized" }, { status: 404 });
+                return NextResponse.json({ error: "Chat not found" }, { status: 404 });
             }
 
-            const sql = `
+            if (!chat_history) {
+                const getHistorySQL = `
+                SELECT role, content as part FROM message
+                WHERE chat_id = $1
+                `
+                const values = [id];
+                const res = await query(getHistorySQL, values);
+                chat_history = res.rows.map((row: any) => ({
+                    role: row.role == "assistant" ? "model" : "user",
+                    parts: [{ text: row.part }]
+                }));
+            }
+            const chat = ai.chats.create({
+                model: 'gemini-2.5-flash',
+                config: {
+                    systemInstruction: `You are a scheduling assistant. Current time in Vietnam is ${new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'full', timeStyle: 'long' })}`,
+                    tools: [{ functionDeclarations: [eventTool.createEvent, eventTool.getEvents] }]
+                },
+                history: chat_history
+            })
+
+            let response = await chat.sendMessage({ message: content });
+
+            // Handle function calls from the model
+            if (response.functionCalls && response.functionCalls.length > 0) {
+                const functionResponses = [];
+
+                for (const call of response.functionCalls) {
+                    let result;
+                    if (call.name === "createEvent") {
+                        const args = call.args as any;
+                        result = await eventFunction.createEvent(
+                            user.id,
+                            id,
+                            args.startTime,
+                            args.endTime,
+                            args.title,
+                            args.urgency,
+                            args.status,
+                            args.description
+                        );
+                    } else if (call.name === "getEvents") {
+                        const args = call.args as any;
+                        result = await eventFunction.getEvents(
+                            user.id,
+                            args.startTime,
+                            args.endTime
+                        );
+                    }
+
+                    functionResponses.push({
+                        name: call.name!,
+                        response: { result }
+                    });
+                }
+
+                // Send function results back to the model for a final text response
+                response = await chat.sendMessage({
+                    message: functionResponses.map(fr => ({ functionResponse: fr }))
+                });
+            }
+
+            const aiMessage = response.text ?? "";
+
+            // Save user message
+            const addUserMessageSQL = `
                 INSERT INTO message (chat_id, role, content)
-                
-            `
+                VALUES($1, $2, $3)
+            `;
+            await query(addUserMessageSQL, [id, "user", content]);
+
+            // Save AI response
+            const addAiMessageSQL = `
+                INSERT INTO message (chat_id, role, content)
+                VALUES($1, $2, $3)
+            `;
+            await query(addAiMessageSQL, [id, "assistant", aiMessage]);
+
+            // Update chat last_updated
+            await query(`UPDATE chat SET last_updated = now() WHERE uuid = $1`, [id]);
+
+            return NextResponse.json({ data: aiMessage }, { status: 200 });
 
 
-        }catch(error: any){
+        } catch (error: any) {
             console.error(error);
-            return NextResponse.json({error: "Server Failed"},{status: 500});
+            return NextResponse.json({ error: "Server Failed" }, { status: 500 });
         }
     },
     async getMessages(req: NextRequest) {

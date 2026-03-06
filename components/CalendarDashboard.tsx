@@ -84,6 +84,13 @@ export default function CalendarDashboard() {
     fetchEvents(date, view);
   }, [date, view, fetchEvents]);
 
+  // Listen for refresh events dispatched by the sidebar chatbot after creating events
+  useEffect(() => {
+    const handleRefresh = () => fetchEvents(date, view);
+    window.addEventListener('calendar-refresh', handleRefresh);
+    return () => window.removeEventListener('calendar-refresh', handleRefresh);
+  }, [date, view, fetchEvents]);
+
   const handlePrev = () => {
     if (view === Views.MONTH) setDate(subMonths(date, 1));
     else setDate(subDays(date, 1));
@@ -101,7 +108,9 @@ export default function CalendarDashboard() {
           <h2 className="text-4xl font-bold tracking-wide flex items-center gap-3">
             <span>{toolbar.label}</span>
           </h2>
-          <div className="flex gap-1 ml-4">
+        </div>
+        <div className="flex items-center gap-6">
+          <div className="flex gap-1">
             <button onClick={handlePrev} className="hover:scale-110 transition-transform cursor-pointer hover:bg-black/5 rounded-full p-1 bg-white border-2 border-black">
               <ChevronLeft size={28} className="text-black" />
             </button>
@@ -109,20 +118,20 @@ export default function CalendarDashboard() {
               <ChevronRight size={28} className="text-black" />
             </button>
           </div>
-        </div>
-        <div className="flex gap-4">
-          <button
-            onClick={() => toolbar.onView("month")}
-            className={`${toolbar.view === "month" ? "bg-accent-yellow" : "bg-white"} px-4 py-2 rounded-xl thick-border font-bold hover:-translate-y-1 transition-transform text-black`}
-          >
-            Month
-          </button>
-          <button
-            onClick={() => toolbar.onView("day")}
-            className={`${toolbar.view === "day" ? "bg-accent-yellow" : "bg-white"} px-4 py-2 rounded-xl thick-border font-bold hover:-translate-y-1 transition-transform text-black`}
-          >
-            Day
-          </button>
+          <div className="flex gap-4">
+            <button
+              onClick={() => toolbar.onView("month")}
+              className={`${toolbar.view === "month" ? "bg-accent-yellow" : "bg-white"} px-4 py-2 rounded-xl thick-border font-bold hover:-translate-y-1 transition-transform text-black`}
+            >
+              Month
+            </button>
+            <button
+              onClick={() => toolbar.onView("day")}
+              className={`${toolbar.view === "day" ? "bg-accent-yellow" : "bg-white"} px-4 py-2 rounded-xl thick-border font-bold hover:-translate-y-1 transition-transform text-black`}
+            >
+              Day
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -266,7 +275,7 @@ export default function CalendarDashboard() {
 
             <div className="flex-1 flex flex-col gap-6">
               <div className="bg-white p-5 rounded-2xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                <h3 className="text-xl font-bold text-black mb-4 break-words">
+                <h3 className="text-xl font-bold text-black mb-4 wrap-break-word">
                   {selectedEvent.title}
                 </h3>
 
@@ -420,6 +429,7 @@ export default function CalendarDashboard() {
 
         .custom-calendar-wrapper .rbc-timeslot-group {
           border-bottom: 1px solid #e5e7eb;
+          min-height: 80px;
         }
       `}</style>
     </div>

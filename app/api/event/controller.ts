@@ -76,7 +76,7 @@ export const eventController = {
             RETURNING *;
             `
             const result = await query(sql, values);
-            return NextResponse.json({ message: "Event Created" }, { status: 201 })
+            return NextResponse.json({ message: "Event Created", data: result.rows[0] }, { status: 201 })
 
         } catch (error: any) {
             console.error("createEvent error:", error);

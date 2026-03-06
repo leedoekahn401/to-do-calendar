@@ -125,6 +125,36 @@ export const chatController = {
         }
     },
 
+    async renameChat(req: NextRequest){
+        try {
+            const { user, authError } = await getUserSession();
+            if (authError || !user || !user.id) {
+                return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+            }
+            const {chat_id, title} = await req.json();
+            if(!chat_id || !title) {
+                return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+            }
+
+            const sql = `
+                UPDATE chat
+                SET title = $1, last_updated = now()
+                WHERE uuid = $2 AND user_id = $3
+                RETURNING *;
+            `;
+            const result = await query(sql, [title, chat_id, user.id]);
+
+            if (result.rows.length === 0) {
+                return NextResponse.json({ error: "Chat not found or unauthorized" }, { status: 404 });
+            }
+
+            return NextResponse.json({ message: "Chat renamed successfully", data: result.rows[0] }, { status: 200 });
+        } catch (error: any) {
+            console.error(error);
+            return NextResponse.json({ error: "Server failed" }, { status: 500 });
+        }
+    },
+
     async deleteChat(req: NextRequest, { params }: any) {
         try {
             const { user, authError } = await getUserSession();

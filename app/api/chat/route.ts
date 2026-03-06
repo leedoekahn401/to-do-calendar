@@ -8,3 +8,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest){
     return chatController.createChats(req);
 }
+
+export async function PUT(req: NextRequest){
+    return chatController.renameChat(req);
+}

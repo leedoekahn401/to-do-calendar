@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Bot, User, Send, Loader2, ArrowLeft, MessageSquarePlus, Trash2 } from "lucide-react";
+import { Bot, User, Send, Loader2, ArrowLeft, MessageSquarePlus, Trash2, MoreVertical, Edit2 } from "lucide-react";
 import LoadingSpinner from "./LoadingSpinner";
 
 type Message = {
@@ -27,7 +27,17 @@ export default function SidebarAssistant() {
     const [isSwitchingChat, setIsSwitchingChat] = useState(false);
     const [loadingChatId, setLoadingChatId] = useState<string | null>(null);
     const [messageCache, setMessageCache] = useState<Record<string, Message[]>>({});
+    const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+    const [editingChatId, setEditingChatId] = useState<string | null>(null);
+    const [editTitle, setEditTitle] = useState("");
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = () => setOpenDropdownId(null);
+        window.addEventListener('click', handleClickOutside);
+        return () => window.removeEventListener('click', handleClickOutside);
+    }, []);
 
     // Load saved input text from localStorage on mount
     useEffect(() => {
@@ -176,7 +186,7 @@ export default function SidebarAssistant() {
         if (!inputText.trim() || !chatId || isLoading) return;
 
         const newUserMessage: Message = {
-            uuid: Date.now().toString(), // Temp ID
+            uuid: Date.now().toString(),
             role: "user",
             content: inputText,
             created_at: new Date().toISOString()
@@ -188,48 +198,41 @@ export default function SidebarAssistant() {
         setIsLoading(true);
 
         try {
-            // Post User Message
-            const res = await fetch('/api/message', {
+            // Send message to the AI endpoint — handles Gemini, function calls, and DB persistence
+            const res = await fetch(`/api/message/item/${chatId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    chat_id: chatId,
-                    role: 'user',
-                    content: newUserMessage.content
-                })
+                body: JSON.stringify({ content: newUserMessage.content })
             });
 
             if (res.ok) {
                 const json = await res.json();
-                // Replace temp ID with actual DB ID
-                setMessages(prev => prev.map(m => m.uuid === newUserMessage.uuid ? json.data : m));
 
-                // --- MOCK ASSISTANT RESPONSE FOR NOW ---
-                // Since there is no LLM configured, we will auto-reply with a dummy response
-                // and save it to the DB so the API functionality is clearly demonstrated.
-                setTimeout(async () => {
-                    const mockReply = "I received your message! (This is a placeholder until AI is connected)";
-                    const replyRes = await fetch('/api/message', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            chat_id: chatId,
-                            role: 'assistant',
-                            content: mockReply
-                        })
-                    });
+                // Build the assistant reply from the AI response
+                const aiReply: Message = {
+                    uuid: Date.now().toString() + '-ai',
+                    role: 'assistant',
+                    content: json.data,
+                    created_at: new Date().toISOString()
+                };
 
-                    if (replyRes.ok) {
-                        const replyJson = await replyRes.json();
-                        setMessages(prev => [...prev, replyJson.data]);
-                    }
-                    setIsLoading(false);
-                }, 1000);
+                setMessages(prev => [...prev, aiReply]);
+
+                // Update cache so navigating away and back keeps the new messages
+                setMessageCache(prev => {
+                    const existing = prev[chatId] || [];
+                    return { ...prev, [chatId]: [...existing, newUserMessage, aiReply] };
+                });
+
+                // Trigger calendar refresh in case the AI created/modified events
+                window.dispatchEvent(new Event('calendar-refresh'));
             } else {
-                setIsLoading(false);
+                const errJson = await res.json().catch(() => null);
+                console.error("AI response error:", errJson?.error || res.statusText);
             }
         } catch (error) {
             console.error("Failed to send message", error);
+        } finally {
             setIsLoading(false);
         }
     };
@@ -316,6 +319,7 @@ export default function SidebarAssistant() {
 
     const handleDeleteChat = async (e: React.MouseEvent, id: string, title: string) => {
         e.stopPropagation(); // Prevent the chat click event from firing
+        setOpenDropdownId(null);
 
         if (window.confirm(`Are you sure you want to delete the chat "${title}" and all its messages?`)) {
             setIsLoading(true);
@@ -338,6 +342,42 @@ export default function SidebarAssistant() {
             } finally {
                 setIsLoading(false);
             }
+        }
+    };
+
+    const startRenaming = (e: React.MouseEvent, id: string, currentTitle: string) => {
+        e.stopPropagation();
+        setOpenDropdownId(null);
+        setEditTitle(currentTitle);
+        setEditingChatId(id);
+    };
+
+    const submitRename = async (id: string) => {
+        const originalTitle = chatList.find(c => c.uuid === id)?.title;
+        if (!editTitle.trim() || editTitle.trim() === originalTitle) {
+            setEditingChatId(null);
+            return;
+        }
+
+        setIsLoading(true);
+        setEditingChatId(null);
+        try {
+            const res = await fetch('/api/chat', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: id, title: editTitle.trim() })
+            });
+
+            if (res.ok) {
+                const json = await res.json();
+                setChatList(prev => prev.map(c => c.uuid === id ? { ...c, title: json.data.title } : c));
+            } else {
+                console.error("Failed to rename chat");
+            }
+        } catch (error) {
+            console.error("Error renaming chat", error);
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -375,28 +415,69 @@ export default function SidebarAssistant() {
                         <div
                             key={chat.uuid}
                             onClick={() => handleChatClick(chat.uuid)}
-                            className="w-full text-left bg-white p-4 rounded-2xl thick-border hover:-translate-y-1 transition-transform group relative overflow-hidden cursor-pointer"
+                            className={`w-full text-left bg-white p-4 rounded-2xl thick-border hover:-translate-y-1 transition-transform group relative cursor-pointer ${openDropdownId === chat.uuid ? 'z-50' : 'z-0'}`}
                         >
                             <div className="flex justify-between items-start gap-2">
-                                <div className="min-w-0">
-                                    <h3 className="font-bold text-black truncate pr-4 text-base font-display">
-                                        {chat.title}
-                                    </h3>
+                                <div className="min-w-0 flex-1">
+                                    {editingChatId === chat.uuid ? (
+                                        <input
+                                            autoFocus
+                                            className="w-full font-bold text-black border-b-2 border-black outline-none bg-transparent pr-4 text-base font-display mb-1"
+                                            value={editTitle}
+                                            onChange={(e) => setEditTitle(e.target.value)}
+                                            onBlur={() => submitRename(chat.uuid)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') submitRename(chat.uuid);
+                                                if (e.key === 'Escape') setEditingChatId(null);
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                        />
+                                    ) : (
+                                        <h3 className="font-bold text-black truncate pr-4 text-base font-display">
+                                            {chat.title}
+                                        </h3>
+                                    )}
                                     <p className="text-xs font-semibold text-gray-500 mt-1 font-display">
                                         {new Date(chat.last_updated).toLocaleDateString()}
                                     </p>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1 relative">
                                     {loadingChatId === chat.uuid && (
-                                        <Loader2 className="animate-spin text-accent-orange" size={20} />
+                                        <Loader2 className="animate-spin text-accent-orange absolute -left-6" size={20} />
                                     )}
                                     <button
-                                        onClick={(e) => handleDeleteChat(e, chat.uuid, chat.title)}
-                                        className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all duration-200"
-                                        title="Delete chat"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownId(openDropdownId === chat.uuid ? null : chat.uuid);
+                                        }}
+                                        className="p-1 rounded-lg hover:bg-black/5 text-gray-500 hover:text-black transition-colors"
+                                        title="Options"
                                     >
-                                        <Trash2 size={18} />
+                                        <MoreVertical size={20} />
                                     </button>
+
+                                    {/* Dropdown Menu */}
+                                    {openDropdownId === chat.uuid && (
+                                        <div 
+                                            className="absolute right-0 top-full mt-1 w-36 bg-white rounded-xl thick-border shadow-lg z-50 overflow-hidden"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <button
+                                                onClick={(e) => startRenaming(e, chat.uuid, chat.title)}
+                                                className="w-full flex items-center gap-2 px-3 py-2 text-sm font-semibold hover:bg-black/5 text-black border-b-2 border-black"
+                                            >
+                                                <Edit2 size={14} />
+                                                Rename
+                                            </button>
+                                            <button
+                                                onClick={(e) => handleDeleteChat(e, chat.uuid, chat.title)}
+                                                className="w-full flex items-center gap-2 px-3 py-2 text-sm font-semibold hover:bg-red-50 text-red-600"
+                                            >
+                                                <Trash2 size={14} />
+                                                Delete
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
