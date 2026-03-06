@@ -14,8 +14,8 @@ export default function LoginButton() {
       provider: 'google',
       options: {
         // It's highly recommended to explicitly state where Google 
-        // should send the user back to after a successful login.
-        redirectTo: `${window.location.origin}/auth/callback?`
+        // should send the user back to a successful login.
+        redirectTo: `${window.location.origin}/auth/callback`
       }
     })
   }
