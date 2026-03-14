@@ -11,25 +11,24 @@ export default function Main() {
           To Do Calendar
         </h1>
 
-        <div className="relative w-64 h-64 border-4 border-black border-solid shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] bg-gray-200 overflow-hidden">
-          <Image
-            src={myImage}
-            alt="Sign in image"
-            fill
-            className="object-cover"
-            priority
+        <div className="relative w-64 h-64 border-4 border-black border-solid shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] bg-white overflow-hidden p-4">
+          <Image 
+            src="/images/hero-graphic.png" 
+            alt="Time Management Graphic" 
+            width={256} 
+            height={256} 
+            className="w-full h-full object-contain"
           />
         </div>
 
-        <div className="bg-[#FF90E8] border-4 border-black border-solid px-6 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-          <p className="text-2xl font-bold text-black font-mono">
-            hmm what to do now...
+        <div className="bg-[#FF90E8] border-4 border-black border-solid px-6 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] max-w-[90%]">
+          <p className="text-lg font-black text-black italic leading-tight">
+            "The key is in not spending time, but in investing it."
           </p>
+          <p className="text-sm font-bold text-black mt-2 opacity-80">— Stephen R. Covey</p>
         </div>
 
-        <p className="text-xl font-bold text-black">
-          (The big button below is a good start 👇)
-        </p>
+        
 
         <div className="w-full flex justify-center mt-4">
           <LoginButton />
